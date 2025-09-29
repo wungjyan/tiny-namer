@@ -2,16 +2,18 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
-	"regexp"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"tiny-namer/backend/file"
+	"tiny-namer/backend/highlight"
+	"tiny-namer/backend/regex"
 )
 
 // App struct
 type App struct {
-	ctx context.Context
+	ctx           context.Context
+	fileService   *file.Service
+	hlService     *highlight.Service
+	regexService  *regex.Service
 }
 
 // NewApp creates a new App application struct
@@ -19,96 +21,86 @@ func NewApp() *App {
 	return &App{}
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
+// startup is called when the app starts up. The context here
+// can be used to call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.fileService = file.NewService(ctx)
+	a.hlService = highlight.NewService()
+	a.regexService = regex.NewService()
 }
 
-type FileInfo struct {
-	FullName string `json:"fullName"`
-	Path     string `json:"path"`
-	Dir      string `json:"dir"`
-	Ext      string `json:"ext"`
-	BaseName string `json:"baseName"`
+// SelectFiles 选择文件
+func (a *App) SelectFiles() file.SelectFilesResult {
+	return a.fileService.SelectFiles()
 }
 
-type SelectFilesResult struct {
-	Success bool       `json:"success"`
-	Files   []FileInfo `json:"files"`
-	Message string     `json:"message"`
+// GetHighlightParts 获取高亮部分
+func (a *App) GetHighlightParts(req highlight.HighlightRequest) []string {
+	return a.hlService.GetHighlightParts(req)
 }
 
-func (a *App) SelectFiles() SelectFilesResult {
-	filesPath, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "选择文件",
-	})
-	if err != nil {
-		println("Error:", err.Error())
-		return SelectFilesResult{
+// ValidateRegex 验证正则表达式
+func (a *App) ValidateRegex(pattern string) regex.ValidateResult {
+	return a.regexService.ValidateRegex(pattern)
+}
+
+// RegexRename 正则表达式重命名（预览模式）
+func (a *App) RegexRename(req regex.RenameRequest) regex.RenameResult {
+	return a.regexService.RegexRename(req)
+}
+
+// RegexRenameExecute 执行正则表达式重命名
+func (a *App) RegexRenameExecute(req regex.RenameRequest) regex.RenameResult {
+	return a.regexService.RegexRenameExecute(req)
+}
+
+// PreviewRegexRename 批量预览正则表达式重命名
+func (a *App) PreviewRegexRename(req struct {
+	Files       []file.FileInfo `json:"files"`
+	Pattern     string          `json:"pattern"`
+	Replacement string          `json:"replacement"`
+	IgnoreExt   bool            `json:"ignoreExt"`
+	IgnoreCase  bool            `json:"ignoreCase"`
+	Global      bool            `json:"global"`
+}) struct {
+	Success bool                  `json:"success"`
+	Items   []regex.RenameResult  `json:"items"`
+	Message string                `json:"message"`
+} {
+	if len(req.Files) == 0 {
+		return struct {
+			Success bool                  `json:"success"`
+			Items   []regex.RenameResult  `json:"items"`
+			Message string                `json:"message"`
+		}{
 			Success: false,
-			Files:   []FileInfo{},
-			Message: err.Error(),
+			Message: "没有选择文件",
+			Items:   []regex.RenameResult{},
 		}
 	}
-	if len(filesPath) == 0 {
-		return SelectFilesResult{
-			Success: false,
-			Files:   []FileInfo{},
-			Message: "未选择文件",
+
+	var results []regex.RenameResult
+	for _, fileInfo := range req.Files {
+		renameReq := regex.RenameRequest{
+			FileInfo:    fileInfo,
+			Pattern:     req.Pattern,
+			Replacement: req.Replacement,
+			IgnoreExt:   req.IgnoreExt,
+			IgnoreCase:  req.IgnoreCase,
+			Global:      req.Global,
 		}
+		result := a.regexService.RegexRename(renameReq)
+		results = append(results, result)
 	}
-	var files []FileInfo
-	for _, filePath := range filesPath {
-		dir := filepath.Dir(filePath)
-		fileName := filepath.Base(filePath)
-		ext := filepath.Ext(filePath)
-		baseName := fileName
-		if ext != "" {
-			baseName = fileName[:len(fileName)-len(ext)]
-		}
-		fileInfo := FileInfo{
-			FullName: fileName,
-			BaseName: baseName,
-			Path:     filePath,
-			Dir:      dir,
-			Ext:      ext,
-		}
-		files = append(files, fileInfo)
-	}
-	return SelectFilesResult{
+
+	return struct {
+		Success bool                  `json:"success"`
+		Items   []regex.RenameResult  `json:"items"`
+		Message string                `json:"message"`
+	}{
 		Success: true,
-		Files:   files,
-		Message: fmt.Sprintf("成功选择了 %d 个文件", len(files)),
-	}
-}
-
-// RegexValidationResult 正则表达式校验结果
-type RegexValidationResult struct {
-	Valid   bool   `json:"valid"`
-	Message string `json:"message"`
-}
-
-// ValidateRegex 校验正则表达式的有效性
-func (a *App) ValidateRegex(pattern string) RegexValidationResult {
-	if pattern == "" {
-		return RegexValidationResult{
-			Valid:   false,
-			Message: "正则表达式不能为空",
-		}
-	}
-
-	// 尝试编译正则表达式
-	_, err := regexp.Compile(pattern)
-	if err != nil {
-		return RegexValidationResult{
-			Valid:   false,
-			Message: fmt.Sprintf("语法错误: %s", err.Error()),
-		}
-	}
-
-	return RegexValidationResult{
-		Valid:   true,
-		Message: "正则表达式有效",
+		Items:   results,
+		Message: "预览完成",
 	}
 }

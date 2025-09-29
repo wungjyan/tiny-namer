@@ -1,19 +1,22 @@
-# README
+# Tiny Namer
 
-## About
+一个基于 Wails 和 Vue 3 开发的文件重命名工具。
 
-This is the official Wails Vue template.
+## 功能特性
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+- 支持正则表达式批量重命名
+- 实时预览重命名结果
+- 跨平台支持（Windows、macOS）
+- 现代化的用户界面
 
-## Live Development
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+## 技术栈
 
-## Building
+- **后端**: Go + Wails v2
+- **前端**: Vue 3 + Vite + Naive UI + Tailwind CSS
+- **状态管理**: Pinia
+- **构建工具**: Wails CLI
 
-To build a redistributable, production mode package, use `wails build`.
+## 许可证
+
+本项目采用 MIT 许可证。
